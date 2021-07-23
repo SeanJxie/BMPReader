@@ -46,13 +46,15 @@ BOOL read_bmp_header(struct BMPHeaders* pBmpBuffer, FILE* pFileStream) {
     return TRUE;
 }
 
-BOOL read_pixel_data(struct BMPHeaders* pBmpHeaders, BYTE* pixelDataBuffer, UINT8* colMapBuffer, FILE* pFileStream) {
-    /* TODO Color table handling */
-    if (pBmpHeaders->imBitDepth <= (USHORT)0x8) {
-        if (fread(colMapBuffer, sizeof(UINT8), (0x1 << pBmpHeaders->imBitDepth) * sizeof(int), pFileStream) != (0x1 << pBmpHeaders->imBitDepth) * sizeof(int)) {
+BOOL read_pixel_data(struct BMPHeaders* pBmpHeaders, BYTE* pixelDataBuffer, BYTE* colMapBuffer, FILE* pFileStream) {
+    /* Color table handling */
+    if (pBmpHeaders->imBitDepth == (USHORT)0x8) {
+        if (fread(colMapBuffer, sizeof(BYTE), (0x1 << pBmpHeaders->imBitDepth) * 0x4, pFileStream) != (0x1 << pBmpHeaders->imBitDepth) * 0x4) {
             return FALSE;
         }
-    } 
+    } else {
+        printf("%d-bit BMPs are not yet supported.\n", pBmpHeaders->imBitDepth);
+    }
 
     /* Read the pixel data to the buffer. */
     if (fseek(pFileStream, pBmpHeaders->pixelDataOffset, SEEK_SET) == 0x0) {
@@ -67,14 +69,14 @@ BOOL read_pixel_data(struct BMPHeaders* pBmpHeaders, BYTE* pixelDataBuffer, UINT
     return TRUE;
 }
 
-BOOL write_bmp_to_screen(struct BMPHeaders* pBmpHeaders, BYTE* pixelData, UINT8* colMap) {
+BOOL write_bmp_to_screen(struct BMPHeaders* pBmpHeaders, BYTE* pixelData, BYTE* colMap) {
     HDC hMon = GetDC(NULL);
 
     /* 24-bit pixel data. */
     if (pBmpHeaders->imBitDepth == (USHORT)0x18) {
         UINT x = 0, y = pBmpHeaders->imHt;
-        for (UINT i = 0; i < pBmpHeaders->fileByteSize; i += 3) {
-            if (SetPixel(hMon, x, y, RGB(pixelData[i + 2], pixelData[i + 1], pixelData[i])) == -1) {
+        for (UINT i = 0x0; i < pBmpHeaders->fileByteSize; i += 0x3) {
+            if (SetPixel(hMon, x, y, RGB(pixelData[i + 0x2], pixelData[i + 0x1], pixelData[i])) == -1) {
                 return FALSE;
             } else {
                 x++;
@@ -83,12 +85,12 @@ BOOL write_bmp_to_screen(struct BMPHeaders* pBmpHeaders, BYTE* pixelData, UINT8*
         }
     }
     
-    /* <= 8-bit pixel data. */
+    /* 8-bit pixel data. */
     else if (pBmpHeaders->imBitDepth <= (USHORT)0x8) {
         UINT x = 0, y = pBmpHeaders->imHt, _temp;
-        for (UINT i = 0; i < pBmpHeaders->fileByteSize; i++) {
-            _temp = pixelData[i] * 4;
-            if (SetPixel(hMon, x, y, RGB(colMap[_temp + 2], colMap[_temp + 1], colMap[_temp])) == -1) {
+        for (UINT i = 0x0; i < pBmpHeaders->fileByteSize; i++) {
+            _temp = pixelData[i] * 0x4;
+            if (SetPixel(hMon, x, y, RGB(colMap[_temp + 0x2], colMap[_temp + 0x1], colMap[_temp])) == -1) {
                 return FALSE;
             } else {
                 x++;
@@ -111,7 +113,7 @@ void show_bmp_info(struct BMPHeaders* pBmp) {
     printf("Image width       : %d px\n"   , pBmp->imHt);
     printf("Image height      : %d px\n"   , pBmp->imWt);
     printf("Color planes      : %d \n"     , pBmp->imPlanes);
-    printf("Bit depth         : %d \n"     , pBmp->imBitDepth);
+    printf("Bit depth         : %d bit\n"  , pBmp->imBitDepth);
     printf("Compression type  : %d \n"     , pBmp->imCompression);
     printf("Image size        : %d bytes\n", pBmp->imSize);
     printf("Image ppm (x)     : %d px\n"   , pBmp->imXPixelsPerMeter);
@@ -130,20 +132,20 @@ int main(int argc, char* argv[]) {
         printf("File %s does not exist.\n", argv[1]);
     }
     
-    struct BMPHeaders bmp;
-    if (read_bmp_header(&bmp, pBmpFile)) {
-        show_bmp_info(&bmp);  
+    struct BMPHeaders bmph;
+    if (read_bmp_header(&bmph, pBmpFile)) {
+        show_bmp_info(&bmph);  
     } 
     else {
         printf("Cannot read file.\n");
         return EXIT_FAILURE;
     }
 
-    BYTE* pixelData = malloc(bmp.fileByteSize);
-    UINT8* colMap   = malloc((0x1 << bmp.imBitDepth) * sizeof(int)); /* Each col map entry is 4 bytes. */
+    BYTE*  pixelData = malloc(bmph.fileByteSize);
+    BYTE*  colMap    = malloc((0x1 << bmph.imBitDepth) * 0x4); /* Each col map entry is 4 bytes. */
 
-    if (read_pixel_data(&bmp, pixelData, colMap, pBmpFile)) {
-        if (!write_bmp_to_screen(&bmp, pixelData, colMap)) {
+    if (read_pixel_data(&bmph, pixelData, colMap, pBmpFile)) {
+        if (!write_bmp_to_screen(&bmph, pixelData, colMap)) {
             printf("Cannot write to screen (image may be too large).\n");
         }
     } 
@@ -151,7 +153,7 @@ int main(int argc, char* argv[]) {
         printf("Cannot read pixel data.\n");
         return EXIT_FAILURE;
     }
-
+    
     free(pixelData);
     free(colMap);
     fclose(pBmpFile);
