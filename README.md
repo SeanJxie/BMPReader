@@ -1,2 +1,4 @@
 # BitMapReader
-So far, it only support 24-bit images. 
+This is a learning project to help with my understanding of binary file structures and the C language.
+- So far, it only supports 24-bit images.
+
